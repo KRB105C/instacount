@@ -1,8 +1,8 @@
 import os
 import time
 import logging
-from flask import Flask, request, jsonify
 import instaloader
+from flask import Flask, request, jsonify
 
 # Konfigurasi logging super lengkap
 logging.basicConfig(
@@ -16,9 +16,31 @@ logging.basicConfig(
 
 app = Flask(__name__)
 
-# Inisialisasi Instaloader dengan User-Agent
+# Inisialisasi Instaloader dengan User-Agent dan sesi login
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
+SESSION_FILE = "session-instagram"
+USERNAME = os.environ.get("IG_USERNAME", "meme_nasional_indonesia_")  # Ganti dengan akunmu
+PASSWORD = os.environ.get("IG_PASSWORD", "simeone")  # Ganti dengan passwordmu
+
 loader = instaloader.Instaloader(user_agent=USER_AGENT)
+
+# Coba muat sesi lama atau login baru
+try:
+    loader.load_session_from_file(USERNAME, SESSION_FILE)
+    logging.info("Berhasil memuat sesi Instagram.")
+except FileNotFoundError:
+    logging.info("Sesi tidak ditemukan. Login dengan username & password...")
+    try:
+        loader.context.log("Login ke Instagram...")
+        loader.login(USERNAME, PASSWORD)
+        loader.save_session_to_file(SESSION_FILE)
+        logging.info("Login berhasil. Sesi disimpan.")
+    except instaloader.exceptions.BadCredentialsException:
+        logging.error("Login gagal. Pastikan username & password benar.")
+        exit(1)
+    except instaloader.exceptions.ConnectionException:
+        logging.error("Tidak dapat terhubung ke Instagram. Coba lagi nanti.")
+        exit(1)
 
 @app.route('/profile', methods=['GET'])
 def get_profile():
@@ -49,7 +71,7 @@ def get_profile():
         return jsonify({"error": "Profil tidak ditemukan"}), 404
     
     except instaloader.exceptions.TooManyRequestsException:
-        logging.warning(f"Terlalu banyak permintaan ke Instagram. Tunggu sebentar sebelum mencoba lagi.")
+        logging.warning("Terlalu banyak permintaan ke Instagram. Tunggu sebentar sebelum mencoba lagi.")
         time.sleep(5)  # Hindari rate limit
         return jsonify({"error": "Terlalu banyak permintaan. Coba lagi nanti."}), 429
     
